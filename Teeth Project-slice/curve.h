@@ -11,7 +11,9 @@ typedef float Point3[3];
 typedef REAL Point2[2];
 
 typedef struct CubicBezierCurve {
-	Point2 control_pts[4];
+	//change
+	//Point3 control_pts[4];
+	Point3 control_pts[4];
 } CubicBezierCurve;
 
 typedef struct BicubicBezierSurface

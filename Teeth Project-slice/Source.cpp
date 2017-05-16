@@ -8,33 +8,34 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <algorithm>
 #include <GL/glut.h>
 #include "curve.h"
 #include "viewport.h"
 
+#define RES 32
 typedef struct finalcurve
 {
 	CubicBezierCurve cur[4];
+	Point3 vertices[5000];
+	Point3 faces[10000];
+	GLint verticenum = 0;
+	GLint facenum = 0;
 	GLfloat z, xmin, xmax, ymin, ymax;
-	int time = 1;
+	GLint time = 1;
 }finalcurve;
 
 /* global */
+BicubicBezierSurface surface;
+float points[RES + 1][RES + 1][3];
+CubicBezierCurve cur_mid, cur_mid1, cur_mid2;
+
 finalcurve finalcur[9];
 int edit_ctrlpts_idx[4] = { -1,-1,-1,-1 };
 int mode = 0;
 
-/*load model parameters*/
-int numVertex = 0;
-int numFaces = 0;/*texture face's number is the same*/
-
-float(*vertices)[3] = NULL;
-int(*faces)[3] = NULL;
-
-GLfloat x_max, xmaxy, x_min, xminy, y_max, ymaxx, y_min, yminx, z;
-Point3 cs[4],cm[4],ce[4],ctrlp_2[4], ctrlp_3[4];
-GLsizei width = 800, height = 600;
-float viewportwidth = 400, viewportheight = 300;
+GLsizei width = 800, height = 400;
+GLsizei viewportwidth = 400, viewportheight = 400;
 
 Vector3d eye;
 Vector3d center;
@@ -43,9 +44,23 @@ bool isDragging = false;
 float radius;
 int lastX = -1;
 int lastY = -1;
+int mouseButton = -1;
+int selectedscene = 0;
+int selected = -1;
 
-void readtxt();
+void setcurve(char* filename, int level);
 void DrawCruve(CubicBezierCurve curve, int x);
+void createsurface(int level1, int level2, CubicBezierCurve cur1, CubicBezierCurve cur2);
+
+//20170511
+void calc_surface()
+{
+	for (int i = 0; i <= RES; i++)
+		for (int j = 0; j <= RES; j++)
+		{
+			evaluate_surface(&surface, i / (float)RES, j / (float)RES, points[i][j]);
+		}
+}
 
 void Init()
 {
@@ -59,7 +74,79 @@ void Init()
 		finalcur[i].cur[0].control_pts[0][0] = 0;
 		finalcur[i].z = 0;
 	}
-	readtxt();
+	setcurve("2_17_slice0.txt", 0);
+	setcurve("2_17_slice1.txt", 1);
+	setcurve("2_17_slice2.txt", 2);
+	setcurve("2_17_slice3.txt", 3);
+	setcurve("2_17_slice4.txt", 4);
+	setcurve("2_17_slice5.txt", 5);
+	setcurve("2_17_slice6.txt", 6);
+	setcurve("2_17_slice7.txt", 7);
+	setcurve("2_17_slice8.txt", 8);
+
+	//20170511
+	createsurface(0, 1, finalcur[0].cur[0], finalcur[1].cur[0]);
+}
+
+//20170511
+void createsurface(int level1, int level2, CubicBezierCurve cur1, CubicBezierCurve cur2)
+{
+	//CubicBezierCurve cur_mid, cur_mid1, cur_mid2;
+	Point3 vector[4];
+	GLfloat cur_mid_z;
+	int i, j;
+
+	for (i = 0; i < 4; i++)
+	{
+		vector[i][X] = 0.1667*(cur2.control_pts[i][X] - cur1.control_pts[i][X]);
+		vector[i][Y] = 0.1667*(cur2.control_pts[i][Y] - cur1.control_pts[i][Y]);
+		vector[i][Z] = 0.1667*(finalcur[level2].z - finalcur[level1].z);
+	}
+
+	for (i = 0; i < 4; i++)
+	{
+		cur_mid.control_pts[i][X] = 0.5*(cur1.control_pts[i][X] + cur2.control_pts[i][X]);
+		cur_mid.control_pts[i][Y] = 0.5*(cur1.control_pts[i][Y] + cur2.control_pts[i][Y]);
+		cur_mid.control_pts[i][Z] = 0.5*(finalcur[level1].z + finalcur[level2].z);
+	}
+
+	for (i = 0; i < 4; i++)
+	{
+		cur_mid1.control_pts[i][X] = cur_mid.control_pts[i][X] - vector[i][X];
+		cur_mid1.control_pts[i][Y] = cur_mid.control_pts[i][Y] - vector[i][Y];
+		cur_mid1.control_pts[i][Z] = cur_mid.control_pts[i][Z] - vector[i][Z];
+
+		cur_mid2.control_pts[i][X] = cur_mid.control_pts[i][X] + vector[i][X];
+		cur_mid2.control_pts[i][Y] = cur_mid.control_pts[i][Y] + vector[i][Y];
+		cur_mid2.control_pts[i][Z] = cur_mid.control_pts[i][Z] + vector[i][Z];
+	}
+
+	//20170511
+	for (i = 0; i < 4; i++)
+	{
+		SET_PT3(surface.control_pts[0][i], cur1.control_pts[i][X], cur1.control_pts[i][Y], finalcur[level1].z);
+		SET_PT3(surface.control_pts[1][i], cur_mid1.control_pts[i][X], cur_mid1.control_pts[i][Y], cur_mid1.control_pts[0][Z]);
+		SET_PT3(surface.control_pts[2][i], cur_mid2.control_pts[i][X], cur_mid2.control_pts[i][Y], cur_mid2.control_pts[0][Z]);
+		SET_PT3(surface.control_pts[3][i], cur2.control_pts[i][X], cur2.control_pts[i][Y], finalcur[level2].z);
+	}
+
+	calc_surface();
+
+	//20170511
+	for (int i = 0; i <= RES; i += 4)
+	{
+		glBegin(GL_LINE_STRIP);
+		for (int j = 0; j <= RES; j++)
+			glVertex3f(points[i][j][0], points[i][j][1], points[i][j][2]);
+		glEnd();
+	}
+	for (int i = 0; i <= RES; i += 4)
+	{
+		glBegin(GL_LINE_STRIP);
+		for (int j = 0; j <= RES; j++)
+			glVertex3f(points[j][i][0], points[j][i][1], points[j][i][2]);
+		glEnd();
+	}
 }
 
 //Draw curve in 3D
@@ -92,69 +179,23 @@ int hit_index(CubicBezierCurve *curve, int x, int y)
 	return -1;
 }
 
-void freedom()
+void setcurve(char* filename, int level)
 {
-	free((float *)vertices);
-	free((int *)faces);
+	int numVertex = 0;
+	int numFaces = 0;
+	int IdxV = 0;
+	int IdxFace = 0;
+	GLfloat x_max, xmaxy, x_min, xminy, y_max, ymaxx, y_min, yminx, z;
+	Point3 cs[4], cm[4], ce[4], ctrlp_2[4], ctrlp_3[4];
 
-	numVertex = 0;
-	numFaces = 0;/*texture face's number is the same*/
-}
-
-void readtxt()
-{
 	char line[256];//get line
 	FILE* fp = NULL;
 	//load model
-	if (mode == 0)
-	{
-		printf("slice 0 has been chosen\n");
-		fp = fopen("2_17_slice0.txt", "rb");
-	}
-	else if (mode == 1)
-	{
-		printf("slice 1 has been chosen\n");
-		fp = fopen("2_17_slice1.txt", "rb");
-	}
-	else if (mode == 2)
-	{
-		printf("slice 1 has been chosen\n");
-		fp = fopen("2_17_slice2.txt", "rb");
-	}
-	else if (mode == 3)
-	{
-		printf("slice 1 has been chosen\n");
-		fp = fopen("2_17_slice3.txt", "rb");
-	}
-	else if (mode == 4)
-	{
-		printf("slice 1 has been chosen\n");
-		fp = fopen("2_17_slice4.txt", "rb");
-	}
-	else if (mode == 5)
-	{
-		printf("slice 1 has been chosen\n");
-		fp = fopen("2_17_slice5.txt", "rb");
-	}
-	else if (mode == 6)
-	{
-		printf("slice 1 has been chosen\n");
-		fp = fopen("2_17_slice6.txt", "rb");
-	}
-	else if (mode == 7)
-	{
-		printf("slice 1 has been chosen\n");
-		fp = fopen("2_17_slice7.txt", "rb");
-	}
-	else if (mode == 8)
-	{
-		printf("slice 1 has been chosen\n");
-		fp = fopen("2_17_slice8.txt", "rb");
-	}
+	fp = fopen(filename, "rb");
 
 	if (fp == NULL)
 	{
-		printf("%s file can not open", "slice.txt");
+		printf("%s file can not open", filename);
 		exit(1);
 	}
 
@@ -173,14 +214,9 @@ void readtxt()
 	//back to start point of file
 	rewind(fp);
 
-	printf("number of vertices : %d\n", numVertex);
-	printf("number of faces : %d\n", numFaces);
-
-	vertices = (float(*)[3])malloc(sizeof(float) * 3 * numVertex);		//정점 
-	faces = (int(*)[3])malloc(sizeof(int) * 3 * numFaces);				//면 (정점)
-
-	int j = 0, t = 0, n = 0, k = 0;
-	int IdxFace = 0;
+	//set finalcur's facenum and verticenum
+	finalcur[level].verticenum = numVertex;
+	finalcur[level].facenum = numFaces;
 
 	while (!feof(fp))
 	{
@@ -196,8 +232,12 @@ void readtxt()
 				fscanf(fp, "%s %f %f %f", line, &x, &y, &z);
 
 				//Scalef
-				vertices[j][0] = (x + 22) * 30 + 0.5* viewportwidth;	vertices[j][1] = (y - 78) * 30 + 0.5* viewportheight;	vertices[j][2] = (z - 38) * 30;
-				j++;
+		        //vertices[j][0] = (x + 22) * 30 + 0.5* viewportwidth;	vertices[j][1] = (y - 78) * 30 + 0.5* viewportheight;	vertices[j][2] = (z - 38) * 30;
+
+				finalcur[level].vertices[IdxV][X] = (x + 22) * 30 + 0.5* viewportwidth;
+				finalcur[level].vertices[IdxV][Y] = (y - 78) * 30 + 0.5* viewportheight;
+				finalcur[level].vertices[IdxV][Z] = (z - 38) * 30;
+				IdxV++;
 			}
 		}
 		else if (line[0] == 'f')
@@ -209,38 +249,38 @@ void readtxt()
 			fscanf(fp, "%s %d//%d %d//%d %d//%d", line, &x1, &x2, &y1, &y2, &z1, &z2);
 
 			//면의 정점                                                          순서 정보
-			faces[IdxFace][0] = x1 - 1;
-			faces[IdxFace][1] = y1 - 1;
-			faces[IdxFace][2] = z1 - 1;
+			finalcur[level].faces[IdxFace][X] = x1 - 1;
+			finalcur[level].faces[IdxFace][Y] = y1 - 1;
+			finalcur[level].faces[IdxFace][Z] = z1 - 1;
 			IdxFace++;
 		}
 	}
-	x_max = x_min = ymaxx = yminx = vertices[0][0];
-	y_max = y_min = xmaxy = xminy = vertices[0][1];
-	z = vertices[0][2];
-//	printf("z is %f\n", z);
+	x_max = x_min = ymaxx = yminx = finalcur[level].vertices[0][X];
+	y_max = y_min = xmaxy = xminy = finalcur[level].vertices[0][Y];
+	z = finalcur[level].vertices[0][Z];
+	//	printf("z is %f\n", z);
 
 	for (int i = 1; i < numVertex; i++)
 	{
-		if (x_max < vertices[i][0])
+		if (x_max < finalcur[level].vertices[i][X])
 		{
-			x_max = vertices[i][0];
-			xmaxy = vertices[i][1];
+			x_max = finalcur[level].vertices[i][X];
+			xmaxy = finalcur[level].vertices[i][Y];
 		}
-		if (x_min > vertices[i][0])
+		if (x_min > finalcur[level].vertices[i][X])
 		{
-			x_min = vertices[i][0];
-			xminy = vertices[i][1];
+			x_min = finalcur[level].vertices[i][X];
+			xminy = finalcur[level].vertices[i][Y];
 		}
-		if (y_max < vertices[i][1])
+		if (y_max < finalcur[level].vertices[i][Y])
 		{
-			y_max = vertices[i][1];
-			ymaxx = vertices[i][0];
+			y_max = finalcur[level].vertices[i][Y];
+			ymaxx = finalcur[level].vertices[i][X];
 		}
-		if (y_min > vertices[i][1])
+		if (y_min > finalcur[level].vertices[i][Y])
 		{
-			y_min = vertices[i][1];
-			yminx = vertices[i][0];
+			y_min = finalcur[level].vertices[i][Y];
+			yminx = finalcur[level].vertices[i][X];
 		}
 	}
 	//curve1
@@ -289,54 +329,49 @@ void readtxt()
 		ctrlp_3[i][1] = 0.666*cm[i][1] + 0.333*ce[i][1];
 	}
 
-	if (finalcur[mode].time < 5)
+	if (finalcur[level].time < 5)
 	{
 		for (int i = 0; i < 4; i++)
 		{
 			{
-				SET_PT2(finalcur[mode].cur[i].control_pts[0], cs[i][0], cs[i][1]);
-				SET_PT2(finalcur[mode].cur[i].control_pts[1], ctrlp_2[i][0], ctrlp_2[i][1]);
-				SET_PT2(finalcur[mode].cur[i].control_pts[2], ctrlp_3[i][0], ctrlp_3[i][1]);
-				SET_PT2(finalcur[mode].cur[i].control_pts[3], ce[i][0], ce[i][1]);
+				SET_PT2(finalcur[level].cur[i].control_pts[0], cs[i][0], cs[i][1]);
+				SET_PT2(finalcur[level].cur[i].control_pts[1], ctrlp_2[i][0], ctrlp_2[i][1]);
+				SET_PT2(finalcur[level].cur[i].control_pts[2], ctrlp_3[i][0], ctrlp_3[i][1]);
+				SET_PT2(finalcur[level].cur[i].control_pts[3], ce[i][0], ce[i][1]);
+
 			}
-			finalcur[mode].time++;
+			finalcur[level].time++;
 		}
-		finalcur[mode].z = z;
-		finalcur[mode].xmin = x_min;
-		finalcur[mode].xmax = x_max;
-		finalcur[mode].ymin = y_min;
-		finalcur[mode].ymax = y_max;
+		finalcur[level].z = z;
+		finalcur[level].xmin = x_min;
+		finalcur[level].xmax = x_max;
+		finalcur[level].ymin = y_min;
+		finalcur[level].ymax = y_max;
 	}
 	fclose(fp);
 }
 
-void reshape_callback(GLint nw, GLint nh)
-{
-	width = nw;
-	height = nh;
-	glViewport(0, 0, width, height);
-	glMatrixMode(GL_PROJECTION);
-	glLoadIdentity();
-	gluOrtho2D(0, width, 0, height);
-}
-
-void DrawModel()
+void Showslice()
 {
 	glPushMatrix();
 	//Draw boundary and mesh
 	glColor3f(1.0, 1.0, 0.0);
 	glBegin(GL_LINE_LOOP);
-	glVertex2f(x_min, y_max);
-	glVertex2f(x_min, y_min);
-	glVertex2f(x_max, y_min);
-	glVertex2f(x_max, y_max);
+	glVertex2f(finalcur[mode].xmin, finalcur[mode].ymax);
+	glVertex2f(finalcur[mode].xmin, finalcur[mode].ymin);
+	glVertex2f(finalcur[mode].xmax, finalcur[mode].ymin);
+	glVertex2f(finalcur[mode].xmax, finalcur[mode].ymax);
 	glEnd();
 
-	for (int i = 0; i < numFaces - 1; i++)
+	for (int i = 0; i < finalcur[mode].facenum - 1; i++)
 	{
-		float p1[3] = { vertices[faces[i][0]][X], vertices[faces[i][0]][Y] };
-		float p2[3] = { vertices[faces[i][1]][X], vertices[faces[i][1]][Y] };
-		float p3[3] = { vertices[faces[i][2]][X], vertices[faces[i][2]][Y] };
+		int f1 = finalcur[mode].faces[i][0];
+		int f2 = finalcur[mode].faces[i][1];
+		int f3 = finalcur[mode].faces[i][2];
+
+		float p1[3] = { finalcur[mode].vertices[f1][X], finalcur[mode].vertices[f1][Y] };
+		float p2[3] = { finalcur[mode].vertices[f2][X], finalcur[mode].vertices[f2][Y] };
+		float p3[3] = { finalcur[mode].vertices[f3][X], finalcur[mode].vertices[f3][Y] };
 
 		glColor3f(1.0, 1.0, 1.0);
 		glBegin(GL_TRIANGLES);
@@ -355,38 +390,6 @@ void DrawModel()
 	glPopMatrix();
 }
 
-void DrawCruve(CubicBezierCurve curve, int x)
-{
-#define RES 100
-	int i;
-	glColor3f(0.2, 0.2, 0.2);
-	glLineWidth(2.0);
-	/* curve */
-	glBegin(GL_LINE_STRIP);
-	for (i = 0; i <= RES; ++i) {
-		Point2 pt;
-		const REAL t = (REAL)i / (REAL)RES;
-		evaluate_curve(&curve, t, pt);
-		glVertex2f(pt[0], pt[1]);
-	}
-	glEnd();
-	glLineWidth(1.0);
-
-	/* control pts */
-	glColor3ub(0, 0, 255);
-	glPointSize(10.0);
-
-	if (x == 0)
-	{
-		glBegin(GL_POINTS);
-		for (i = 0; i < 4; ++i) {
-			REAL *pt = curve.control_pts[i];
-			glVertex2f(pt[0], pt[1]);
-		}
-		glEnd();
-	}
-}
-
 void display_callback(void)
 {
 	glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
@@ -398,10 +401,10 @@ void display_callback(void)
 	glMatrixMode(GL_MODELVIEW);
 	glLoadIdentity();
 	glColor3f(0, 0, 0);
-	glBegin(GL_LINES);
+	/*glBegin(GL_LINES);
 	glVertex3f(-1, 0, 0);
 	glVertex3f(1, 0, 0);
-	glEnd();
+	glEnd();*/
 	glBegin(GL_LINES);
 	glVertex3f(0, -1, 0);
 	glVertex3f(0, 1, 0);
@@ -409,17 +412,23 @@ void display_callback(void)
 
 
 	// XY
-	glViewport(0, viewportheight, viewportwidth, viewportheight);
+//	glViewport(0, viewportheight, viewportwidth, viewportheight);
+
+	glViewport(0, 0, viewportwidth, viewportheight);
 	glLoadIdentity();
 	gluOrtho2D(0, (double)viewportwidth, 0, (double)viewportheight);
 	glColor3ub(255, 255, 255);
 
-	DrawModel();
+
+    //DrawModel();
+	Showslice();
 	for (int i = 0; i < 4; i++)
 		DrawCruve(finalcur[mode].cur[i], 0);
 
 	// 3D
-	glViewport(viewportwidth, viewportheight, viewportwidth, viewportheight);
+//	glViewport(viewportwidth, viewportheight, viewportwidth, viewportheight);
+	glViewport(viewportwidth, 0, viewportwidth, viewportheight);
+
 	glMatrixMode(GL_PROJECTION);
 	glLoadIdentity();
 	gluPerspective(25, width / (double)height, 0.1, 25000);
@@ -441,8 +450,16 @@ void display_callback(void)
 	glVertex3f(0, 0, 500.0f);
 	glEnd();
 
-	curvein3d();
+	glColor3f(0.7, 0.7, 0.7);
+	for (int i = 0; i < 8; i++)
+	{
+		createsurface(i, i + 1, finalcur[i].cur[0], finalcur[i + 1].cur[0]);
+		createsurface(i, i + 1, finalcur[i].cur[1], finalcur[i + 1].cur[1]);
+		createsurface(i, i + 1, finalcur[i].cur[2], finalcur[i + 1].cur[2]);
+		createsurface(i, i + 1, finalcur[i].cur[3], finalcur[i + 1].cur[3]);
+	}
 
+	curvein3d();
 	glDisable(GL_DEPTH_TEST);
 
 	glutSwapBuffers();
@@ -450,23 +467,63 @@ void display_callback(void)
 
 void mouse_callback(GLint button, GLint action, GLint x, GLint y)
 {
-	Vector3d lastP = getMousePoint(lastX, lastY, viewportwidth, viewportheight, radius);
-	Vector3d currentP = getMousePoint(x - viewportwidth, y, viewportwidth, viewportheight, radius);
+	int scene = 0;
+	if (x < viewportwidth)
+	{
+		if (y < viewportheight)
+			scene = 1;
+		else
+		{
+			scene = 3;
+			y -= (int)viewportheight;
+		}
+	}
+	else
+	{
+		x -= (int)viewportwidth;
+		if (y < viewportheight)
+			scene = 2;
+		else
+		{
+			scene = 4;
+			y -= (int)viewportheight;
+		}
+	}
 
-	if (GLUT_LEFT_BUTTON == button) {
-		switch (action) {
-		case GLUT_DOWN:
-			for (int i = 0; i < 4; i++)
-			{
-				//change finalcurve when curve changed
-				edit_ctrlpts_idx[i] = hit_index(&finalcur[mode].cur[i], x, viewportheight - y);
+	if (action == GLUT_UP)
+	{
+		isDragging = false;
+		mouseButton = -1;
+	}
+
+	if (scene == 2)
+	{
+		if (action == GLUT_DOWN)
+		{
+			mouseButton = button;
+			isDragging = true;
+			lastX = x;
+			lastY = y;
+		}
+	}
+	else
+	{
+		if (button == GLUT_LEFT_BUTTON)
+		{
+			switch (action) {
+			case GLUT_DOWN:
+				for (int i = 0; i < 4; i++)
+				{
+					//change finalcurve when curve changed
+					edit_ctrlpts_idx[i] = hit_index(&finalcur[mode].cur[i], x, viewportheight - y);
+				}
+				break;
+
+			case GLUT_UP:
+				for (int i = 0; i<4; i++)
+					edit_ctrlpts_idx[i] = -1;
+				break;
 			}
-			break;
-
-		case GLUT_UP:
-			for (int i = 0; i<4; i++)
-				edit_ctrlpts_idx[i] = -1;
-			break;
 		}
 	}
 	glutPostRedisplay();
@@ -474,14 +531,65 @@ void mouse_callback(GLint button, GLint action, GLint x, GLint y)
 
 void mouse_move_callback(GLint x, GLint y)
 {
-	//changed
-	for (int i = 0; i < 4; i++)
+	Vector3d lastP = getMousePoint(lastX, lastY, viewportwidth, viewportheight, radius);
+	Vector3d currentP = getMousePoint(x - viewportwidth, y, viewportwidth, viewportheight, radius);
+
+	if (mouseButton == GLUT_LEFT_BUTTON)
 	{
-		//modify this part to let curve points translate to (- 0.5 * viewportwidth, - 0.5 * viewportwidth)
-		if (edit_ctrlpts_idx[i] != -1) {
-			//change finalcurve
-			finalcur[mode].cur[i].control_pts[edit_ctrlpts_idx[i]][0] = (REAL)x;
-			finalcur[mode].cur[i].control_pts[edit_ctrlpts_idx[i]][1] = (REAL)(viewportheight - y);
+		Vector3d rotateVector;
+		rotateVector.cross(currentP, lastP);
+		double angle = -currentP.angle(lastP) * 2;
+		rotateVector = unProjectToEye(rotateVector, eye, center, upVector);
+
+		Vector3d dEye;
+		dEye.sub(center, eye);
+		dEye = rotate(dEye, rotateVector, -angle);
+		upVector = rotate(upVector, rotateVector, -angle);
+		eye.sub(center, dEye);
+	}
+	else if (mouseButton == GLUT_RIGHT_BUTTON) {
+		Vector3d dEye;
+		dEye.sub(center, eye);
+		double offset = 0.025;
+		if ((y - lastY) < 0) {
+			dEye.scale(1 - offset);
+		}
+		else {
+			dEye.scale(1 + offset);
+		}
+		eye.sub(center, dEye);
+	}
+	else if (mouseButton == GLUT_MIDDLE_BUTTON) {
+		double dx = x - viewportwidth - lastX;
+		double dy = y - lastY;
+		if (dx != 0 || dy != 0)
+		{
+			Vector3d moveVector(dx, dy, 0);
+			moveVector = unProjectToEye(moveVector, eye, center, upVector);
+			moveVector.normalize();
+			double eyeDistance = Vector3d(eye).distance(Vector3d(center));
+			moveVector.scale(std::sqrt(dx*dx + dy*dy) / 1000 * eyeDistance);
+			center.add(moveVector);
+			eye.add(moveVector);
+		}
+	}
+
+	lastX = x - viewportwidth;
+	lastY = y;
+
+
+//	if (selectedscene == 1)
+	if (x<viewportwidth)
+	{
+		//changed
+		for (int i = 0; i < 4; i++)
+		{
+			//modify this part to let curve points translate to (- 0.5 * viewportwidth, - 0.5 * viewportwidth)
+			if (edit_ctrlpts_idx[i] != -1) {
+				//change finalcurve
+				finalcur[mode].cur[i].control_pts[edit_ctrlpts_idx[i]][0] = (REAL)x;
+				finalcur[mode].cur[i].control_pts[edit_ctrlpts_idx[i]][1] = (REAL)(viewportheight - y);
+			}
 		}
 	}
 	glutPostRedisplay();
@@ -495,64 +603,55 @@ void keyboard_callback(unsigned char key, int x, int y)
 	case '0':
 	{
 		mode = 0;
-		freedom();
-		readtxt();
+		printf("slice[%d]-vertice number: %d, face number: %d\n", mode, finalcur[mode].verticenum, finalcur[mode].facenum);
 		break;
 	}
 	case '1':
 	{
 		mode = 1;
-		freedom();
-		readtxt();
+		printf("slice[%d]-vertice number: %d, face number: %d\n", mode, finalcur[mode].verticenum, finalcur[mode].facenum);
 		break;
 	}
 	case '2':
 	{
 		mode = 2;
-		freedom();
-		readtxt();
+		printf("slice[%d]-vertice number: %d, face number: %d\n", mode, finalcur[mode].verticenum, finalcur[mode].facenum);
 		break;
 	}
 	case '3':
 	{
 		mode = 3;
-		freedom();
-		readtxt();
+		printf("slice[%d]-vertice number: %d, face number: %d\n", mode, finalcur[mode].verticenum, finalcur[mode].facenum);
 		break;
 	}
 	case '4':
 	{
 		mode = 4;
-		freedom();
-		readtxt();
+		printf("slice[%d]-vertice number: %d, face number: %d\n", mode, finalcur[mode].verticenum, finalcur[mode].facenum);
 		break;
 	}
 	case '5':
 	{
 		mode = 5;
-		freedom();
-		readtxt();
+		printf("slice[%d]-vertice number: %d, face number: %d\n", mode, finalcur[mode].verticenum, finalcur[mode].facenum);
 		break;
 	}
 	case '6':
 	{
 		mode = 6;
-		freedom();
-		readtxt();
+		printf("slice[%d]-vertice number: %d, face number: %d\n", mode, finalcur[mode].verticenum, finalcur[mode].facenum);
 		break;
 	}
 	case '7':
 	{
 		mode = 7;
-		freedom();
-		readtxt();
+		printf("slice[%d]-vertice number: %d, face number: %d\n", mode, finalcur[mode].verticenum, finalcur[mode].facenum);
 		break;
 	}
 	case '8':
 	{
 		mode = 8;
-		freedom();
-		readtxt();
+		printf("slice[%d]-vertice number: %d, face number: %d\n", mode, finalcur[mode].verticenum, finalcur[mode].facenum);
 		break;
 	}
 	case 'a':
@@ -571,8 +670,22 @@ void keyboard_callback(unsigned char key, int x, int y)
 	glutPostRedisplay();
 }
 
+void reshape_callback(GLint nw, GLint nh)
+{
+	width = nw;
+	height = nh;
+	viewportwidth = width / 2.0f;
+//	viewportheight = height / 2.0f;
+
+	viewportheight = height;
+	radius = std::sqrt(viewportwidth * viewportwidth + viewportheight * viewportheight) / 2;
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+}
+
 int main(int argc, char *argv[])
 {
+//	setcurve("2_17_slice0.txt", 1);
 	glutInit(&argc, argv);
 	glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA);
 	glutInitWindowSize(width, height);

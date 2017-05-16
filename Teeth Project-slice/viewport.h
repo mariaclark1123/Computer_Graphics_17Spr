@@ -14,7 +14,7 @@
 #endif
 #define LARGE    FLT_MAX
 
-enum XY { X = 0, Y };
+enum XY { X = 0, Y, Z };
 enum TYPE { AABB = 0, OBB };
 
 struct Vector3d{

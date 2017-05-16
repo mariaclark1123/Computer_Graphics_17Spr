@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <float.h>
+#include <GL/glut.h>
 
 enum XYZ { X = 0, Y, Z };
 
@@ -60,4 +61,36 @@ void evaluate_surface(const BicubicBezierSurface *curve, const float t1, const f
 	for (int i = 0; i < 4; i++)
 	for (int j = 0; j < 4; j++)
 		VECTOR3_X_SCALA_ADD(value, curve->control_pts[i][j], b[0][i] * b[1][j]);
+}
+
+void DrawCruve(CubicBezierCurve curve, int x)
+{
+#define RES 100
+	int i;
+	glColor3f(0.2, 0.2, 0.2);
+	glLineWidth(2.0);
+	/* curve */
+	glBegin(GL_LINE_STRIP);
+	for (i = 0; i <= RES; ++i) {
+		Point2 pt;
+		const REAL t = (REAL)i / (REAL)RES;
+		evaluate_curve(&curve, t, pt);
+		glVertex2f(pt[0], pt[1]);
+	}
+	glEnd();
+	glLineWidth(1.0);
+
+	/* control pts */
+	glColor3ub(0, 0, 255);
+	glPointSize(10.0);
+
+	if (x == 0)
+	{
+		glBegin(GL_POINTS);
+		for (i = 0; i < 4; ++i) {
+			REAL *pt = curve.control_pts[i];
+			glVertex2f(pt[0], pt[1]);
+		}
+		glEnd();
+	}
 }
