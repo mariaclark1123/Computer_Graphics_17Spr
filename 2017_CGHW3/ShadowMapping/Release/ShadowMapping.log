@@ -1,0 +1,10 @@
+﻿  main.cpp
+c:\users\user\documents\visual studio 2015\projects\shadowmapping\shadowmapping\setup.h(169): warning C4305: 'argument': truncation from 'double' to 'GLfloat'
+main.cpp(261): warning C4305: 'argument': truncation from 'double' to 'GLfloat'
+  Generating code
+  1 of 396 functions ( 0.3%) were compiled, the rest were copied from previous compilation.
+    0 functions were new in current compilation
+    10 functions had inline decision re-evaluated but remain unchanged
+  Finished generating code
+  ShadowMapping.vcxproj -> C:\Users\User\Documents\Visual Studio 2015\Projects\ShadowMapping\Bin\Release\ShadowMapping.exe
+  ShadowMapping.vcxproj -> C:\Users\User\Documents\Visual Studio 2015\Projects\ShadowMapping\Bin\Release\ShadowMapping.pdb (Full PDB)
