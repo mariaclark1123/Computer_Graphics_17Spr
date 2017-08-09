@@ -1,0 +1,11 @@
+﻿  Source.cpp
+Source.cpp(789): warning C4800: 'int': forcing value to bool 'true' or 'false' (performance warning)
+Source.cpp(792): warning C4800: 'int': forcing value to bool 'true' or 'false' (performance warning)
+Source.cpp(795): warning C4800: 'int': forcing value to bool 'true' or 'false' (performance warning)
+  Generating code
+  1 of 63 functions ( 1.6%) were compiled, the rest were copied from previous compilation.
+    0 functions were new in current compilation
+    1 functions had inline decision re-evaluated but remain unchanged
+  Finished generating code
+  Teeth.vcxproj -> C:\Users\User\Documents\Visual Studio 2015\Projects\Teeth\Bin\Release\Teeth.exe
+  Teeth.vcxproj -> C:\Users\User\Documents\Visual Studio 2015\Projects\Teeth\Bin\Release\Teeth.pdb (Full PDB)
