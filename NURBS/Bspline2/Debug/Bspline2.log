@@ -1,0 +1,4 @@
+﻿  Source.cpp
+c:\users\user\documents\visual studio 2015\projects\bspline2\bspline2\source.cpp(68): warning C4838: conversion from 'double' to 'float' requires a narrowing conversion
+  Bspline2.vcxproj -> C:\Users\User\documents\visual studio 2015\Projects\Bspline2\Debug\Bspline2.exe
+  Bspline2.vcxproj -> C:\Users\User\documents\visual studio 2015\Projects\Bspline2\Debug\Bspline2.pdb (Full PDB)
